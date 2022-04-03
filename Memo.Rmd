@@ -1,0 +1,175 @@
+---
+title: "GSS Survey data analysis"
+output: html_notebook
+---
+rm(list=ls())
+
+#data input
+gss<-read.csv(file.choose())
+View(gss)
+colnames(gss)<-c("eduyrs", "int.env", "int.eco", "betterlife", "wwwhrs", "pol.aff", "gender", "fathedu", "faminc")
+#data cleansing
+##delete rows with N/As and not applicables/don't know/no answer
+gssomit<-na.omit(gss)
+View(gssomit)
+library(dplyr)
+gssomit2<- gssomit %>% filter_all(all_vars(. != "Not applicable"))  
+View(gssomit2)
+gssomit3<- gssomit2 %>% filter_all(all_vars(. != "No answer"))
+View(gssomit3)
+gssomit4<- gssomit3 %>% filter_all(all_vars(. != "Don't know"))
+View(gssomit4)
+gssomit4<- gssomit4 %>% filter_all(all_vars(. != "Dont know"))
+View(gssomit4)
+gssomit5<- gssomit4 %>% filter_all(all_vars(. != 999))
+View(gssomit5)
+gssomit6<- gssomit5 %>% filter_all(all_vars(. != 998))
+View(gssomit6)
+gssomit7<- gssomit6 %>% filter_all(all_vars(. != -1))
+View(gssomit7)
+
+##recode character to numerica values
+###recode betterlife
+library(dplyr)
+gssclean = gssomit7 %>%
+  mutate(betterlife = recode(gssomit7$betterlife,
+    "Strongly disagree" = 0, "Disagree" = 0, "Agree" = 1, "Strongly agree" = 1))
+View(gssclean)
+###recode gender
+gssclean2 = gssclean %>%
+  mutate(gender= recode(gssclean$gender,
+    "Female" = 0, "Male" = 1))
+View(gssclean2)
+###recode interest variables
+gssclean3 = gssclean2 %>%
+  mutate(int.env= recode(gssclean2$int.env,
+    "Not at all interested" = 0, "Moderately interested" = 1, "Very interested" = 2))
+View(gssclean3)
+gssclean4 = gssclean3 %>%
+  mutate(int.eco= recode(gssclean3$int.eco,
+     "Not at all interested" = 0, "Moderately interested" = 1, "Very interested" = 2))
+View(gssclean4)
+
+###recode pol.aff
+gssclean5 = gssclean4 %>%
+  mutate(pol.aff= recode(gssclean4$pol.aff,
+     "Strong democrat" = 1, "Not str democrat" = 2, "Ind,near dem" = 3, "Independent" = 4, "Ind,near rep" = 5, "Not str republican" = 6, "Strong republican" = 7))
+View(gssclean5)
+####delete other party
+gssclean5<-na.omit(gssclean5)
+View(gssclean5)
+
+##convert fathedu, coll.sci and wwwhrs from character to numeric
+attach(gssclean5)
+gssclean5$fathedu<-as.numeric(fathedu)
+gssclean5$eduyrs<-as.numeric(eduyrs)
+gssclean5$wwwhrs<-as.numeric(wwwhrs)
+
+#Descriptives
+summary(gssclean5)
+
+#Normality test)
+library(MVN)
+result<-mvn(gssclean5)
+result
+
+#re-arrange the variables
+gssclean5<-cbind(gssclean5$betterlife, gssclean5$gender, gssclean5$fathedu, gssclean5$eduyrs, gssclean5$int.env, gssclean5$int.eco, gssclean5$wwwhrs, gssclean5$pol.aff, gssclean5$faminc)
+colnames(gssclean5)<-c("betterlife", "gender", "fathedu", "eduyrs", "int.env", "int.eco", "wwwhrs", "pol.aff",  "faminc")
+View(gssclean5)
+
+
+#Detect outliers)
+library(mvoutlier)
+gssmatrix<-as.matrix(gssclean5[,3:9])
+res<-chisq.plot(gssmatrix,1)
+res$outliers
+
+#remove outliers)
+gssclean6<-gssclean5[-c(352, 552, 124, 65, 290, 488, 520, 305, 60),]
+View(gssclean6)
+
+#Correlation : Spearman method)
+cor(gssclean6, method="spearman")
+
+#CLARA Clustring
+##Silouhette
+library(cluster)
+library(factoextra)
+fviz_nbclust(gssclean6, clara, method="silhouette")
+
+clara1<-clara(gssclean6, 2, samples=50, pamLike=TRUE)
+print(clara1)
+fviz_cluster(clara1, ellipse.type="t", geom="point", pointsize=1, ggthem=theme_classic())
+
+clara2<-clara(gssclean6, 10, samples=50, pamLike=TRUE)
+print(clara2)
+fviz_cluster(clara2, ellipse.type="t", geom="point", pointsize=1, ggthem=theme_classic())
+
+#LDA Discriminant Function
+library(MASS)
+gss.disc <- lda(betterlife ~ int.env + int.eco + pol.aff + gender + faminc + eduyrs + fathedu + wwwhrs, prior=c(.5,.5))
+gss.disc
+plot(gss.disc, dimen=1, type="both")
+##APER
+gss.class <- predict(gss.disc, method="plug-in")$class
+gss.class
+table(betterlife,gss.class)
+247/824
+#QDA Discriminant Function
+gss.disc2 <- qda(betterlife ~ int.env + int.eco + pol.aff + gender + faminc + eduyrs + fathedu + wwwhrs, prior=c(.5,.5))
+gss.disc2
+plot(gss.disc2, dimen=1, type="both")
+
+#Binomial logistic regression
+##Data pre-treatment
+gssclean6<-data.frame(gssclean6)
+gssclean6$betterlife<-factor(gssclean6$betterlife)
+gssclean6$int.env.f<-factor(gssclean6$int.env)
+gssclean6$int.eco.f<-factor(gssclean6$int.eco)
+gssclean6$pol.aff.f<-factor(gssclean6$pol.aff)
+gssclean6$gender<-factor(gssclean6$gender)
+
+##ordinal variables not converted
+gss.logit<-glm(betterlife~gender+eduyrs+fathedu+int.env+int.eco+pol.aff+wwwhrs+faminc, data=gssclean6, family="binomial")
+summary(gss.logit)
+##ordinal variables converted
+gss.logit.f<-glm(betterlife~gender+eduyrs+fathedu+int.env.f+int.eco.f+pol.aff.f+wwwhrs+faminc, data=gssclean6, family="binomial")
+summary(gss.logit.f)
+
+##Hosmer-Lemeshow Goodness-of-fit test
+library(generalhoslem)
+###Ordinal variables not converted
+logitgof(gssclean6$betterlife, fitted(gss.logit))
+###Ordinal variables converted
+logitgof(gssclean6$betterlife, fitted(gss.logit.f))
+
+###Choose to use the one with unconverted -> no significant difference between the two models
+
+#odds ratios
+exp(coef(gss.logit))
+
+#remove influential points
+cutoff <- 4/(nrow(gssclean6))
+cutoff
+plot(gss.logit, which=4, cook.levels=cutoff)
+
+
+#Principal Component Analysis
+gssclean7<-gssclean6[!(gssclean6$faminc==0),]
+gsspc<-cbind(gssclean7[,1:9])
+gsspc$betterlife<-as.numeric(levels(gsspc$betterlife))[gsspc$betterlife]
+gsspc$gender<-as.numeric(levels(gsspc$gender))[gsspc$gender]
+gsspc$betterlife<-gsspc$betterlife+1
+gsspc$gender<-gsspc$gender+1
+gsspc$int.env<-gsspc$int.env+1
+gsspc$int.eco<-gsspc$int.eco+1
+View(gsspc)
+pcgss<-princomp(na.omit(gsspc), cor=T, scores=T)
+summary(pcgss, loadings=T)
+screeplot(pcgss, type="lines")
+
+
+
+gss.logit<-glm(sciup~gender+eduyrs+fathedu+int.env+int.eco+pol.aff+wwwhrs+faminc, data=gssclean5, family="binomial")
+summary(gss.logit)
