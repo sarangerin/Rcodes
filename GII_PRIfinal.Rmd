@@ -1,0 +1,240 @@
+---
+title: "Global Innovations Index"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+Variables and their Labels
+
+ier19	 Innovation Efficiency Ratio
+nnoin	 Innovation Input Sub-index
+nnout	 Innovation Output Sub-index
+insti	Institutions
+hcnrd	Human capital and research
+infra	Infrastructure
+mktso	Market sophistication
+bizso	Business sophistication
+ktout	Knowledge and technology outputs
+crout	Creative outputs
+
+
+Load the basic package
+```{r}
+library(ggplot2)
+library(ggthemes)
+```
+
+Load the data
+```{r}
+gii<-read.csv(file.choose(),row.names = 1)
+head(gii)
+```
+
+TOp30 and Bot30
+```{r}
+library(plyr)
+
+top30<-head(arrange(gii,desc(gii19)), n = 30)
+bot30<-tail(arrange(gii,desc(gii19)), n = 30)
+gii60<-rbind(top30,bot30)
+head(gii60)
+```
+Descriptives 1: Finding the mean of all cases, top30, and low30
+
+```{r}
+summary(gii)
+summary(gii60)
+summary(top30)
+summary(bot30)
+```
+
+Descriptives 2: Finding the correlations
+```{r}
+corgii<-cor(gii)
+cort30<-cor(top30)
+corb30<-cor(bot30)
+cort30<-round(cort30, digits = 4)
+corb30<-round(corb30, digits = 4)
+corgii<-round(corgii, digits = 4)
+corgii
+```
+
+loading the package for plotting correlation
+```{r}
+library(ggcorrplot)
+library(GGally)
+```
+
+Figure1: Plotting correlation matrices:
+```{r}
+ggcorr(gii, label = FALSE, midpoint= 0.5)
+ggcorr(top30, label = FALSE, midpoint= 0.5)
+ggcorr(bot30, label = FALSE, midpoint= 0.5)
+```
+
+create a region variable
+```{r}
+library(countrycode)
+gii<-read.csv(file.choose())
+as.character(gii$Country.1)
+gii$region<-countrycode(gii$Country.1, 'country.name', 'region')
+gii$regionf<-factor(gii$region)
+gii$regionf2<-countrycode(gii$Country.1, 'country.name', 'continent')
+gii$regionf2<-factor(gii$regionf2)
+library(plyr)
+revalue(gii$regionf2, c("Europe"="Euro+Oceania", "Oceania"="Euro+Oceania"))
+
+top30<-head(arrange(gii,desc(gii19)), n = 30)
+bot30<-tail(arrange(gii,desc(gii19)), n = 30)
+gii60<-rbind(top30,bot30)
+head(gii60)
+
+
+```
+
+create a factor variable for grouping within gii dataset
+```{r}
+gii$groupf<- c("Top30","Mid", "Bot30")
+gii$groupf[gii$gii19>=46.90] <- "Top30"
+gii$groupf[26.80<gii$gii19 & gii$gii19<46.90]<-"Mid"
+gii$groupf[gii$gii19<=26.80]<-"Bot30"
+gii$groupf<-factor(gii$groupf)
+
+gii60$groupff<-c("Top30", "Bot30")
+gii60$groupff[gii60$gii19>=46.90] <-"Top30"
+gii60$groupff[gii60$gii19<=26.80]<-"Bot30"
+gii60$groupff<-factor(gii60$groupff)
+
+```
+
+Figure2: Violi Plot: GII 2018 by Region
+```{r}
+library(ggplot2)
+theme_set(theme_bw())
+
+Figure2 <- ggplot(gii, aes(regionf2, gii19, fill=regionf2)) 
+Figure2 + geom_violin() + 
+  labs(title="Global Innovation Index 2018 by Region",
+       subtitle="in Violin Plot",
+       x="Region (Continent)",
+       y="GII 2018") 
+```
+
+Figure3: Boxplot of GII 2018 by Group * Region
+```{r}
+library(ggthemes)
+Figure3 <- ggplot(gii, aes(regionf2, gii19))
+Figure3 + geom_boxplot(aes(fill=factor(groupf))) + 
+  theme(axis.text.x = element_text(angle=65, vjust=0.6)) + 
+  labs(title="GII 2018 by Region and Rank", 
+       subtitle="in Boxplot",
+       x="Region",
+       y="GII 2018 Score")
+```
+
+Figure4. Scatter plot: GII-IER 2018 by Region * Rank
+```{r}
+library(ggplot2)
+theme_set(theme_bw()) 
+data("gii", package = "ggplot2")
+
+Figure4 <- ggplot(data = gii, aes(x=ier19, y=gii19)) + 
+  geom_point(aes(shape=groupf, col=regionf2)) + 
+  geom_smooth(method="loess", se=F) + 
+  xlim(c(0.2, 1.0)) + 
+  ylim(c(0, 80)) +
+  labs(subtitle="Innovation Efficiecy Vs Index Scores", 
+       y="GII2018", 
+       x="IER2018", 
+       title="Scatterplot")
+
+plot(Figure4)
+```
+
+Figure 5,6,7: Top 30 vs. Bottom 30 Histograms on nnoin, nnout, and ier19
+# create mean data with plyr and ddply to dra mean line by group
+```{r}
+library(plyr)
+inmu <- ddply(gii60, "groupf", summarise, grp.mean1=mean(nnoin))
+head(inmu)
+Figure5<-ggplot(gii60, aes(x=nnoin, color=groupf, fill=groupf)) +
+  geom_histogram(alpha=0.9, position = "identity", bins=55) +
+  geom_vline(data=inmu, aes(xintercept=grp.mean1, color=groupf),
+             linetype="dashed")+
+   labs(title="Histogram of Innovation Inputs - Top 30 vs. Bottom 30",
+        x="Innovation Input Scores", y = "Density(Frequency)")
+ Figure5 + scale_color_brewer(palette="Accent") + theme_classic()
+
+ oumu <- ddply(gii60, "groupf", summarise, grp.mean2=mean(nnout))
+head(oumu)
+Figure6<-ggplot(gii60, aes(x=nnout, color=groupf, fill=groupf)) +
+  geom_histogram(alpha=0.9, position = "identity", bins=55) +
+  geom_vline(data=oumu, aes(xintercept=grp.mean2, color=groupf),
+             linetype="dashed")+
+   labs(title="Histogram of Innovation outputs - Top 30 vs. Bottom 30",
+        x="Innovation Output Scores", y = "Density(Frequency)") 
+Figure6 + scale_color_brewer(palette="Dark2") + theme_classic()
+
+iemu <- ddply(gii60, "groupf", summarise, grp.mean3=mean(ier19))
+head(iemu)
+Figure7<-ggplot(gii60, aes(x=ier19, color=groupf, fill=groupf)) +
+  geom_histogram(alpha=0.7, position = "identity", bins=55) +
+  geom_vline(data=iemu, aes(xintercept=grp.mean3, color=groupf),
+             linetype="dashed")+
+   labs(title="Histogram of Innovation Efficiency Ratio - Top 30 vs. Bottom 30",
+        x="Innovation Efficiency Ratios", y = "Frequency(Density)") 
+Figure7 + scale_color_brewer(palette="Set1") + theme_classic()
+```
+
+Figure8. Matrix of Scatterplot and Correlations of Seven Input and Output Pillars - Top 30 vs. Bottom 30
+```{r}
+my_cols <- c("#00AFBB", "#E7B800")  
+pairs(gii60[,5:11], pch = 19, cex = 0.3, oma=c(7,3,3,15),
+      col = my_cols[gii60$groupff],
+      lower.panel=NULL)
+panel.cor <- function(x, y){
+    usr <- par("usr"); on.exit(par(usr))
+    par(usr = c(0, 1, 0, 1))
+    r <- round(cor(x, y), digits=2)
+    txt <- paste0("R = ", r)
+    cex.cor <- 0.8/strwidth(txt)
+    text(0.5, 0.5, txt, cex = cex.cor * r)
+}
+upper.panel<-function(x, y){
+  points(x,y, pch = 19, col = my_cols[gii60$groupff])
+}
+scattb<-pairs(gii60[,5:11], oma=c(7,3,3,15), 
+      lower.panel = panel.cor,
+      upper.panel = upper.panel)
+par(xpd = TRUE)
+legend("bottomright", fill = unique(c("#00AFBB", "#E7B800")), legend = c( levels(gii60$groupff)))
+
+```
+
+Figure9. mapping top 30vs.bottom30
+```{r}
+library(countrycode)
+
+gii60<-read.csv(file.choose())
+as.character(gii60$Country.1)
+gii60$iso<-countrycode(gii60$Country.1, 'country.name', 'iso3c')
+gii60$iso<-factor(gii60$iso)
+
+library(rworldmap)
+
+theCountries <- gii60$iso
+theFactor <- gii60$groupff
+
+ranks <- data.frame(country = theCountries,
+  GII_by_Ranks = theFactor)
+
+giiMap <- joinCountryData2Map(ranks, joinCode = "ISO3",
+  nameJoinColumn = "country")
+
+mapCountryData(giiMap, nameColumnToPlot="GII_by_Ranks", catMethod = "categorical",
+  missingCountryCol = gray(.8), colourPalette = c("lightseagreen", "orange1"))
+```
+
